@@ -110,9 +110,9 @@ erDiagram
 
 ## 💡 技術的なこだわり・工夫点
 
-1. **Prismaの接続管理（Transaction vs Session Mode）**
-   * Supabaseのコネクションプーラー（Transaction mode: ポート `6543`）を `DATABASE_URL` に設定。VercelなどのServerless環境で同時接続が溢れるのを防止。
-   * マイグレーション実行用には、直接接続（Session mode: ポート `5432`）である `DIRECT_URL` を指定し、安全かつ堅牢なスキーマ更新を実現。
+1. **Prismaの接続管理（Transaction vs Session Mode）＆ IPv4/IPv6の互換性対策**
+   * Supabaseのコネクションプーラー（Transaction mode: ポート `6543`）を `DATABASE_URL` に設定し、Vercelなどのサーバーレス環境で同時接続が枯渇するのを防止。
+   * Vercel（IPv4のみサポート）からSupabase（デフォルトで直接接続がIPv6のみ）に接続する際のエラーを回避するため、マイグレーション実行用の `DIRECT_URL` には直接接続アドレスではなく、IPv4/IPv6デュアルスタックに対応したプーラーのSession mode（ポート `5432`）を採用。これにより安全かつ安定したスキーマ更新を実現。
 2. **Prismaクライアントのシングルトンパターン**
    * 開発中にNext.jsのホットリロードによって無駄なPrisma Clientのインスタンスが大量生成され、データベース接続数が枯渇するのを防ぐ設計（`src/lib/prisma.ts`）を適用。
 3. **Windows環境におけるTurbopackの互換性対策**
@@ -132,8 +132,9 @@ npm install
 ### 2. 環境変数の設定 (`.env`)
 プロジェクトのルートに `.env` ファイルを作成し、Supabaseの接続文字列を設定します。
 ```env
-DATABASE_URL="postgresql://postgres:[PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:6543/postgres?pgbouncer=true&connection_limit=1"
-DIRECT_URL="postgresql://postgres:[PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres"
+DATABASE_URL="postgresql://postgres.[YOUR-PROJECT-REF]:[PASSWORD]@[YOUR-POOLER-HOST].pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1"
+# Vercel等のIPv4環境向けに、DIRECT_URLも直接接続（IPv6専用）ではなくプール接続のSession mode（ポート 5432）を使用します
+DIRECT_URL="postgresql://postgres.[YOUR-PROJECT-REF]:[PASSWORD]@[YOUR-POOLER-HOST].pooler.supabase.com:5432/postgres"
 ```
 
 ### 3. データベースマイグレーション & シードデータの挿入
