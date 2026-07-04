@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { PrismaClient } from '@prisma/client'
 
+const providers = ['aws-0', 'gcp-0']
 const regions = [
   'ap-northeast-1',
   'ap-northeast-2',
@@ -12,33 +13,37 @@ const regions = [
   'us-west-1',
   'us-west-2',
   'eu-west-1',
-  'eu-central-1'
+  'eu-central-1',
+  'eu-west-3'
 ]
 
 export async function GET() {
   const results: any = {}
 
-  for (const region of regions) {
-    const encodedPassword = "z-JJtz6%21HSq6jgK"
-    const url = `postgresql://postgres.yakqeblvqcpztgwbofeo:${encodedPassword}@aws-0-${region}.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1`
-    
-    try {
-      const client = new PrismaClient({
-        datasources: {
-          db: { url }
+  for (const provider of providers) {
+    for (const region of regions) {
+      const key = `${provider}-${region}`
+      const encodedPassword = "z-JJtz6%21HSq6jgK"
+      const url = `postgresql://postgres.yakqeblvqcpztgwbofeo:${encodedPassword}@${provider}.${region}.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1`
+      
+      try {
+        const client = new PrismaClient({
+          datasources: {
+            db: { url }
+          }
+        })
+        await client.$connect()
+        results[key] = "✅ CONNECTED SUCCESS!"
+        await client.$disconnect()
+      } catch (e: any) {
+        const msg = e.message || ''
+        if (msg.includes('not found') || msg.includes('tenant')) {
+          results[key] = "❌ Tenant not found"
+        } else if (msg.includes('authentication failed') || msg.includes('password')) {
+          results[key] = "🔑 Correct Region! But Password Auth Failed"
+        } else {
+          // Connection timed out or DNS error, omit to keep output readable
         }
-      })
-      await client.$connect()
-      results[region] = "✅ CONNECTED SUCCESS!"
-      await client.$disconnect()
-    } catch (e: any) {
-      const msg = e.message || ''
-      if (msg.includes('not found') || msg.includes('tenant')) {
-        results[region] = "❌ Tenant not found"
-      } else if (msg.includes('authentication failed') || msg.includes('password')) {
-        results[region] = "🔑 Correct Region! But Password Auth Failed"
-      } else {
-        results[region] = `❓ Other Error: ${msg.substring(0, 100)}`
       }
     }
   }
