@@ -27,5 +27,5 @@ body {
 
 body.grabbing-active,
 body.grabbing-active * {
-  cursor: move !important;
+  cursor: pointer !important;
 }

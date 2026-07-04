@@ -381,6 +381,23 @@ export default function AsanaClone() {
   const handleSaveTaskDetail = async () => {
     if (!selectedTask) return
     setIsSavingTask(true)
+
+    // Optimistically update tasks state immediately
+    setTasks(prev => prev.map(t => t.id === selectedTask.id ? { 
+      ...t, 
+      title: selectedTask.title,
+      description: selectedTask.description,
+      status: selectedTask.status,
+      dueDate: selectedTask.dueDate,
+      projectId: selectedTask.projectId,
+      assigneeId: selectedTask.assigneeId,
+      assignee: users.find(u => u.id === selectedTask.assigneeId) || null,
+      project: projects.find(p => p.id === selectedTask.projectId) || t.project
+    } : t))
+
+    setSelectedTask(null)
+    setIsSavingTask(false)
+
     try {
       const res = await fetch(`/api/tasks/${selectedTask.id}`, {
         method: 'PATCH',
@@ -395,17 +412,16 @@ export default function AsanaClone() {
         })
       })
       if (res.ok) {
-        await refreshTasks()
-        await refreshProjects()
-        setSelectedTask(null)
+        refreshTasks()
+        refreshProjects()
       } else {
-        alert('タスクの保存に失敗しました。')
+        alert('タスクの保存に失敗しました。データを再同期します。')
+        refreshTasks()
       }
     } catch (error) {
       console.error(error)
       alert('保存中にエラーが発生しました。')
-    } finally {
-      setIsSavingTask(false)
+      refreshTasks()
     }
   }
 
