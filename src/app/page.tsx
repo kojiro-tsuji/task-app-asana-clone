@@ -30,6 +30,7 @@ interface User {
 interface Project {
   id: string
   name: string
+  members?: User[]
   _count?: {
     tasks: number
   }
