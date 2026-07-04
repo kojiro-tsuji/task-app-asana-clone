@@ -436,7 +436,7 @@ export default function AsanaClone() {
       const res = await fetch(`/api/projects/${activeProject.id}/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: memberEmailToAdd })
+        body: JSON.stringify({ query: memberEmailToAdd })
       })
       const data = await res.json()
       if (res.ok) {
@@ -792,7 +792,7 @@ export default function AsanaClone() {
         <header className="h-14 border-b border-slate-200 flex items-center justify-between px-8 bg-white shrink-0">
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-              {activeProject ? activeProject.name : 'すべてのタスク'}
+              {activeProject ? activeProject.name : (filterAssignee === 'me' ? 'マイタスク' : 'すべてのタスク')}
             </h1>
             {activeProject && (
               <div className="flex items-center gap-2 ml-1">
@@ -1506,14 +1506,14 @@ export default function AsanaClone() {
             {/* Form */}
             <form onSubmit={handleAddMemberSubmit} className="p-6 space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-500">追加するユーザーのメールアドレス</label>
+                <label className="text-xs font-semibold text-slate-500">追加するユーザーのメールアドレスまたはお名前</label>
                 <input 
-                  type="email" 
+                  type="text" 
                   required
-                  placeholder="name@example.com"
+                  placeholder="例: name@example.com または 佐藤"
                   value={memberEmailToAdd}
                   onChange={(e) => setMemberEmailToAdd(e.target.value)}
-                  className="w-full border border-slate-200 rounded-lg px-3.5 py-2 text-sm outline-none focus:border-indigo-500"
+                  className="w-full border border-slate-200 rounded-lg px-3.5 py-2 text-sm outline-none focus:border-indigo-500 bg-white"
                 />
               </div>
 

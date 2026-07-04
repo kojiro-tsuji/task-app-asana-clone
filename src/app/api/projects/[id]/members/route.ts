@@ -8,14 +8,20 @@ export async function POST(
   try {
     const { id } = await params
     const body = await request.json()
-    const { email } = body
+    const { email, query } = body
+    const searchQuery = query || email
 
-    if (!email) {
-      return NextResponse.json({ error: 'Email is required' }, { status: 400 })
+    if (!searchQuery) {
+      return NextResponse.json({ error: '検索クエリが必要です。' }, { status: 400 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email },
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: searchQuery },
+          { name: { contains: searchQuery, mode: 'insensitive' } }
+        ]
+      }
     })
 
     if (!user) {
