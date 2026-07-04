@@ -65,6 +65,7 @@ export default function AsanaClone() {
   
   // Selected Task for Slide-over
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
+  const [isSavingTask, setIsSavingTask] = useState(false)
   
   // Add dialog states
   const [isAddingProject, setIsAddingProject] = useState(false)
@@ -261,7 +262,10 @@ export default function AsanaClone() {
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault()
     const targetProjId = newTaskProjId || activeProject?.id
-    if (!newTaskTitle.trim() || !targetProjId) return
+    if (!newTaskTitle.trim() || !targetProjId) {
+      alert('タスクタイトルとプロジェクトの指定は必須です。')
+      return
+    }
 
     try {
       const res = await fetch('/api/tasks', {
@@ -350,13 +354,39 @@ export default function AsanaClone() {
   }
 
   // Handle Slide-over Close and Save
-  const handleCloseSlideOver = async () => {
-    if (selectedTask) {
-      await handleUpdateTask(selectedTask.id, { 
-        title: selectedTask.title,
-        description: selectedTask.description 
+  const handleCloseSlideOver = () => {
+    setSelectedTask(null)
+  }
+
+  // Handle detailed task saving on click
+  const handleSaveTaskDetail = async () => {
+    if (!selectedTask) return
+    setIsSavingTask(true)
+    try {
+      const res = await fetch(`/api/tasks/${selectedTask.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: selectedTask.title,
+          description: selectedTask.description,
+          status: selectedTask.status,
+          dueDate: selectedTask.dueDate,
+          projectId: selectedTask.projectId,
+          assigneeId: selectedTask.assigneeId
+        })
       })
-      setSelectedTask(null)
+      if (res.ok) {
+        await refreshTasks()
+        await refreshProjects()
+        setSelectedTask(null)
+      } else {
+        alert('タスクの保存に失敗しました。')
+      }
+    } catch (error) {
+      console.error(error)
+      alert('保存中にエラーが発生しました。')
+    } finally {
+      setIsSavingTask(false)
     }
   }
 
@@ -542,7 +572,10 @@ export default function AsanaClone() {
         {/* Sidebar Nav Actions */}
         <div className="px-4 py-4 flex flex-col gap-2 shrink-0">
           <button 
-            onClick={() => setIsAddingTask(true)}
+            onClick={() => {
+              setNewTaskProjId(activeProject?.id || '')
+              setIsAddingTask(true)
+            }}
             className="flex items-center justify-center gap-2 w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold transition-all duration-200 shadow-lg shadow-indigo-600/20 active:scale-[0.98]"
           >
             <Plus className="h-4 w-4" />
@@ -996,7 +1029,6 @@ export default function AsanaClone() {
                   onChange={(e) => {
                     const title = e.target.value
                     setSelectedTask({ ...selectedTask, title })
-                    handleUpdateTask(selectedTask.id, { title })
                   }}
                   className="w-full text-lg font-bold text-slate-800 border-none outline-none p-1.5 hover:bg-slate-50 focus:bg-slate-50 focus:ring-2 focus:ring-indigo-500 rounded-lg transition-all"
                 />
@@ -1012,7 +1044,6 @@ export default function AsanaClone() {
                     onChange={(e) => {
                       const status = e.target.value
                       setSelectedTask({ ...selectedTask, status })
-                      handleUpdateTask(selectedTask.id, { status })
                     }}
                     className="w-full bg-slate-50 border border-slate-200 text-xs font-medium rounded-lg p-2 outline-none focus:border-indigo-600"
                   >
@@ -1032,7 +1063,6 @@ export default function AsanaClone() {
                       const val = e.target.value
                       const dueDate = val ? new Date(val).toISOString() : null
                       setSelectedTask({ ...selectedTask, dueDate })
-                      handleUpdateTask(selectedTask.id, { dueDate })
                     }}
                     className="w-full bg-slate-50 border border-slate-200 text-xs font-medium rounded-lg p-2 outline-none focus:border-indigo-600"
                   />
@@ -1046,7 +1076,6 @@ export default function AsanaClone() {
                     onChange={(e) => {
                       const projectId = e.target.value
                       setSelectedTask({ ...selectedTask, projectId })
-                      handleUpdateTask(selectedTask.id, { projectId })
                     }}
                     className="w-full bg-slate-50 border border-slate-200 text-xs font-medium rounded-lg p-2 outline-none focus:border-indigo-600"
                   >
@@ -1064,7 +1093,6 @@ export default function AsanaClone() {
                     onChange={(e) => {
                       const assigneeId = e.target.value || null
                       setSelectedTask({ ...selectedTask, assigneeId })
-                      handleUpdateTask(selectedTask.id, { assigneeId })
                     }}
                     className="w-full bg-slate-50 border border-slate-200 text-xs font-medium rounded-lg p-2 outline-none focus:border-indigo-600"
                   >
@@ -1078,7 +1106,6 @@ export default function AsanaClone() {
                       type="button"
                       onClick={() => {
                         setSelectedTask({ ...selectedTask, assigneeId: currentUser.id })
-                        handleUpdateTask(selectedTask.id, { assigneeId: currentUser.id })
                       }}
                       className="mt-1 text-[10px] text-indigo-600 hover:text-indigo-850 font-semibold flex items-center gap-1 active:scale-95 transition-all text-left"
                     >
@@ -1098,10 +1125,6 @@ export default function AsanaClone() {
                     const description = e.target.value
                     setSelectedTask({ ...selectedTask, description })
                   }}
-                  onBlur={() => {
-                    // Update on blur to avoid excessive API requests
-                    handleUpdateTask(selectedTask.id, { description: selectedTask.description })
-                  }}
                   className="w-full h-36 bg-slate-50/50 border border-slate-200 rounded-lg p-3 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none resize-none transition-all placeholder-slate-400"
                 />
               </div>
@@ -1109,14 +1132,34 @@ export default function AsanaClone() {
             </div>
 
             {/* Footer Panel */}
-            <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-3">
+            <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-between items-center gap-3">
               <button 
                 onClick={() => handleDeleteTask(selectedTask.id)}
-                className="flex items-center gap-1.5 px-4 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg text-xs font-semibold transition-colors"
+                disabled={isSavingTask}
+                className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
               >
                 <Trash2 className="h-4 w-4" />
                 タスク削除
               </button>
+              
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleCloseSlideOver}
+                  disabled={isSavingTask}
+                  className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveTaskDetail}
+                  disabled={isSavingTask}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 flex items-center gap-1 cursor-pointer"
+                >
+                  {isSavingTask ? '保存中...' : '変更を保存'}
+                </button>
+              </div>
             </div>
           </>
         )}
@@ -1189,6 +1232,7 @@ export default function AsanaClone() {
                   <select 
                     value={newTaskProjId}
                     onChange={(e) => setNewTaskProjId(e.target.value)}
+                    required
                     className="w-full border border-slate-200 rounded-lg px-3.5 py-2 text-sm outline-none focus:border-indigo-500 bg-white"
                   >
                     <option value="">プロジェクトを選択...</option>
