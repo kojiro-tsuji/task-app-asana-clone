@@ -53,6 +53,7 @@ export default function AsanaClone() {
   const [projects, setProjects] = useState<Project[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
+  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null)
 
   // Navigation / Filter states
   const [activeProject, setActiveProject] = useState<Project | null>(null)
@@ -281,6 +282,11 @@ export default function AsanaClone() {
   // Drag and Drop implementation
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
     e.dataTransfer.setData('text/plain', taskId)
+    setDraggingTaskId(taskId)
+  }
+
+  const handleDragEnd = () => {
+    setDraggingTaskId(null)
   }
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -289,6 +295,7 @@ export default function AsanaClone() {
 
   const handleDrop = async (e: React.DragEvent, targetStatus: string) => {
     e.preventDefault()
+    setDraggingTaskId(null)
     const taskId = e.dataTransfer.getData('text/plain')
     if (!taskId) return
 
@@ -616,8 +623,11 @@ export default function AsanaClone() {
                           key={task.id}
                           draggable
                           onDragStart={(e) => handleDragStart(e, task.id)}
+                          onDragEnd={handleDragEnd}
                           onClick={() => setSelectedTask(task)}
-                          className="bg-white p-4 border border-slate-200 rounded-xl shadow-sm hover:shadow-md cursor-grab active:cursor-grabbing transition-all group relative border-l-4 border-l-indigo-500/35"
+                          className={`bg-white p-4 border border-slate-200 rounded-xl shadow-sm hover:shadow-md cursor-grab active:cursor-grabbing transition-all group relative border-l-4 border-l-indigo-500/35 ${
+                            draggingTaskId === task.id ? 'opacity-40 border-dashed border-indigo-400 bg-indigo-50/10' : ''
+                          }`}
                         >
                           <div className="flex items-start justify-between gap-3">
                             <span className="text-sm font-medium text-slate-800 line-clamp-2 leading-snug">
