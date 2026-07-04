@@ -349,10 +349,24 @@ export default function AsanaClone() {
     }
   }
 
+  // Handle Slide-over Close and Save
+  const handleCloseSlideOver = async () => {
+    if (selectedTask) {
+      await handleUpdateTask(selectedTask.id, { 
+        title: selectedTask.title,
+        description: selectedTask.description 
+      })
+      setSelectedTask(null)
+    }
+  }
+
   // Drag and Drop implementation
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
     e.dataTransfer.setData('text/plain', taskId)
-    setDraggingTaskId(taskId)
+    // Defer setting the state to allow the browser to capture an opaque ghost image of the card
+    setTimeout(() => {
+      setDraggingTaskId(taskId)
+    }, 0)
   }
 
   const handleDragEnd = () => {
@@ -947,6 +961,14 @@ export default function AsanaClone() {
         </div>
       </main>
 
+      {/* Slide-over backdrop */}
+      {selectedTask && (
+        <div 
+          onClick={handleCloseSlideOver}
+          className="fixed inset-0 bg-slate-900/10 z-40 backdrop-blur-[0.5px] cursor-pointer"
+        />
+      )}
+
       {/* SLIDE-OVER (TASK DETAIL PANEL) */}
       <div className={`fixed inset-y-0 right-0 w-[460px] bg-white shadow-2xl border-l border-slate-200 flex flex-col z-50 transform transition-transform duration-300 ease-in-out ${selectedTask ? 'translate-x-0' : 'translate-x-full'}`}>
         {selectedTask && (
@@ -955,8 +977,8 @@ export default function AsanaClone() {
             <div className="h-14 border-b border-slate-100 flex items-center justify-between px-6 bg-slate-50/50">
               <span className="text-xs font-semibold text-slate-400 tracking-wider uppercase">タスク詳細</span>
               <button 
-                onClick={() => setSelectedTask(null)}
-                className="p-1 rounded-lg hover:bg-slate-250 text-slate-450 hover:text-slate-700 transition-all"
+                onClick={handleCloseSlideOver}
+                className="p-1 rounded-lg hover:bg-slate-200 text-slate-450 hover:text-slate-700 transition-all cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
