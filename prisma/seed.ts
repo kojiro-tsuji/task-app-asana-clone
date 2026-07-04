@@ -9,22 +9,34 @@ async function main() {
   await prisma.project.deleteMany()
   await prisma.user.deleteMany()
 
-  // Create Users
-  const user1 = await prisma.user.create({
-    data: {
-      email: 'yamada@example.com',
-      name: '山田 太郎',
-      password: hashPassword('password123', 'yamada@example.com'),
-    },
-  })
+  console.log('Seeding 10 demo members...')
+  
+  // Define 10 demo members
+  const demoUsers = [
+    { email: 'yamada@example.com', name: '山田 太郎' },
+    { email: 'sato@example.com', name: '佐藤 美咲' },
+    { email: 'suzuki@example.com', name: '鈴木 一郎' },
+    { email: 'takahashi@example.com', name: '高橋 健二' },
+    { email: 'tanaka@example.com', name: '田中 裕子' },
+    { email: 'ito@example.com', name: '伊藤 直樹' },
+    { email: 'watanabe@example.com', name: '渡辺 真一' },
+    { email: 'yamamoto@example.com', name: '山本 恵' },
+    { email: 'nakamura@example.com', name: '中村 俊介' },
+    { email: 'kobayashi@example.com', name: '小林 陽子' },
+  ]
 
-  const user2 = await prisma.user.create({
-    data: {
-      email: 'sato@example.com',
-      name: '佐藤 美咲',
-      password: hashPassword('password123', 'sato@example.com'),
-    },
-  })
+  const createdUsers: any[] = []
+  
+  for (const u of demoUsers) {
+    const user = await prisma.user.create({
+      data: {
+        email: u.email,
+        name: u.name,
+        password: hashPassword('password123', u.email),
+      },
+    })
+    createdUsers.push(user)
+  }
 
   // Create Projects
   const project1 = await prisma.project.create({
@@ -39,14 +51,14 @@ async function main() {
     },
   })
 
-  // Create Tasks
+  // Create Tasks with assignments spread across users
   await prisma.task.create({
     data: {
       title: '要件定義書の作成',
       description: '基本要件を整理し、関係者へレビューする。',
       status: 'TODO',
       projectId: project1.id,
-      assigneeId: user1.id,
+      assigneeId: createdUsers[0].id, // 山田 太郎
       dueDate: new Date('2026-07-15'),
     }
   })
@@ -57,7 +69,7 @@ async function main() {
       description: 'Figmaを使ってUIのワイヤーフレームを設計する。',
       status: 'IN_PROGRESS',
       projectId: project1.id,
-      assigneeId: user2.id,
+      assigneeId: createdUsers[1].id, // 佐藤 美咲
       dueDate: new Date('2026-07-20'),
     }
   })
@@ -68,7 +80,7 @@ async function main() {
       description: 'ブランドロゴのカラーバリエーションを確定する。',
       status: 'DONE',
       projectId: project2.id,
-      assigneeId: user1.id,
+      assigneeId: createdUsers[2].id, // 鈴木 一郎
       dueDate: new Date('2026-07-01'),
     }
   })
@@ -79,12 +91,23 @@ async function main() {
       description: '紹介用ランディングページのテキストを執筆する。',
       status: 'TODO',
       projectId: project2.id,
-      assigneeId: user2.id,
+      assigneeId: createdUsers[3].id, // 高橋 健二
       dueDate: new Date('2026-07-10'),
     }
   })
 
-  console.log('Seed data created successfully!')
+  await prisma.task.create({
+    data: {
+      title: '開発環境の構築と検証',
+      description: 'ローカルおよびVercel本番でのDB接続テストを実施する。',
+      status: 'IN_PROGRESS',
+      projectId: project1.id,
+      assigneeId: createdUsers[4].id, // 田中 裕子
+      dueDate: new Date('2026-07-05'),
+    }
+  })
+
+  console.log('Seed data created successfully with 10 demo members!')
 }
 
 main()
