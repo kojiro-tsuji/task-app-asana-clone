@@ -21,6 +21,7 @@ export async function GET(request: Request) {
     })
     return NextResponse.json(tasks)
   } catch (error) {
+    console.error('GET tasks error:', error)
     return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 })
   }
 }
