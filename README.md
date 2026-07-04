@@ -1,5 +1,15 @@
 # Asana Clone - プロ仕様タスク管理プラットフォーム
 
+<p align="left">
+  <img src="https://img.shields.io/badge/Next.js-16.2-000000?style=for-the-badge&logo=nextdotjs&logoColor=white" alt="Next.js" />
+  <img src="https://img.shields.io/badge/React-19.0-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React" />
+  <img src="https://img.shields.io/badge/Tailwind_CSS-v4.0-38B2AC?style=for-the-badge&logo=tailwindcss&logoColor=white" alt="Tailwind CSS" />
+  <img src="https://img.shields.io/badge/Prisma-v6.19-2D3748?style=for-the-badge&logo=prisma&logoColor=white" alt="Prisma" />
+  <img src="https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase" />
+  <img src="https://img.shields.io/badge/TypeScript-5.0-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Vercel-Deploys-000000?style=for-the-badge&logo=vercel&logoColor=white" alt="Vercel" />
+</p>
+
 社内異動面談用ポートフォリオとして開発された、Asanaの操作感を忠実に再現したリッチなフルスタック・タスク管理ツールです。  
 Next.js (App Router) + Supabase (PostgreSQL / Prisma) のモダンなWeb3層構造を採用し、高品質なUI/UXと堅牢なデータベース連携を最速で実現しました。
 
@@ -34,18 +44,18 @@ graph LR
     classDef server fill:#f3e8ff,stroke:#7c3aed,stroke-width:2px;
     classDef db fill:#ecfdf5,stroke:#059669,stroke-width:2px;
 
-    subgraph Client ["フロントエンド (ブラウザ)"]
-        UI["React 19 / Tailwind CSS"]:::client
-        Dnd["HTML5 Drag & Drop (楽観的UI更新)"]:::client
+    subgraph Client ["🌐 フロントエンド (ブラウザ)"]
+        UI["🎨 React 19 / Tailwind CSS"]:::client
+        Dnd["📦 HTML5 Drag & Drop (楽観的UI更新)"]:::client
     end
 
-    subgraph Backend ["バックエンド (API / Web Server)"]
-        NextAPI["Next.js App Router API Routes"]:::server
-        Prisma["Prisma ORM (シングルトンパターン)"]:::server
+    subgraph Backend ["⚙️ バックエンド (API / Web Server)"]
+        NextAPI["⚡ Next.js App Router API Routes"]:::server
+        Prisma["💎 Prisma ORM (シングルトンパターン)"]:::server
     end
 
-    subgraph Database ["クラウドデータベース"]
-        SupaDB["Supabase Cloud (PostgreSQL)"]:::db
+    subgraph Database ["💾 クラウドデータベース"]
+        SupaDB["⚡ Supabase Cloud (PostgreSQL)"]:::db
     end
 
     UI -->|"① ユーザー操作 (ドラッグ等)"| Dnd
@@ -101,7 +111,7 @@ erDiagram
 ## 💡 技術的なこだわり・工夫点
 
 1. **Prismaの接続管理（Transaction vs Session Mode）**
-   * Supabase of コネクションプーラー（Transaction mode: ポート `6543`）を `DATABASE_URL` に設定。VercelなどのServerless環境で同時接続が溢れるのを防止。
+   * Supabaseのコネクションプーラー（Transaction mode: ポート `6543`）を `DATABASE_URL` に設定。VercelなどのServerless環境で同時接続が溢れるのを防止。
    * マイグレーション実行用には、直接接続（Session mode: ポート `5432`）である `DIRECT_URL` を指定し、安全かつ堅牢なスキーマ更新を実現。
 2. **Prismaクライアントのシングルトンパターン**
    * 開発中にNext.jsのホットリロードによって無駄なPrisma Clientのインスタンスが大量生成され、データベース接続数が枯渇するのを防ぐ設計（`src/lib/prisma.ts`）を適用。
