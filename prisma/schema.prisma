@@ -17,6 +17,7 @@ model User {
   name      String?
   password  String   @default("")
   tasks     Task[]
+  projects  Project[]
   createdAt DateTime @default(now())
 }
 
@@ -24,6 +25,7 @@ model Project {
   id        String   @id @default(uuid())
   name      String
   tasks     Task[]
+  members   User[]
   createdAt DateTime @default(now())
 }
 

@@ -66,6 +66,12 @@ export default function AsanaClone() {
   // Selected Task for Slide-over
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [isSavingTask, setIsSavingTask] = useState(false)
+
+  // Project Members states
+  const [isAddingMemberToProj, setIsAddingMemberToProj] = useState(false)
+  const [memberEmailToAdd, setMemberEmailToAdd] = useState('')
+  const [addMemberError, setAddMemberError] = useState<string | null>(null)
+  const [isAddingMemberLoading, setIsAddingMemberLoading] = useState(false)
   
   // Add dialog states
   const [isAddingProject, setIsAddingProject] = useState(false)
@@ -281,13 +287,15 @@ export default function AsanaClone() {
         })
       })
       if (res.ok) {
+        const createdTask = await res.json()
         setNewTaskTitle('')
         setNewTaskDesc('')
         setNewTaskDueDate('')
         setNewTaskAssignee('')
         setIsAddingTask(false)
-        await refreshTasks()
-        await refreshProjects()
+        setTasks(prev => [createdTask, ...prev])
+        refreshTasks()
+        refreshProjects()
       }
     } catch (error) {
       console.error(error)
@@ -310,9 +318,11 @@ export default function AsanaClone() {
         })
       })
       if (res.ok) {
+        const createdTask = await res.json()
         setInlineTaskTitles(prev => ({ ...prev, [status]: '' }))
-        await refreshTasks()
-        await refreshProjects()
+        setTasks(prev => [createdTask, ...prev])
+        refreshTasks()
+        refreshProjects()
       }
     } catch (error) {
       console.error(error)
@@ -328,8 +338,8 @@ export default function AsanaClone() {
         body: JSON.stringify(fields)
       })
       if (res.ok) {
-        await refreshTasks()
-        await refreshProjects()
+        refreshTasks()
+        refreshProjects()
       }
     } catch (error) {
       console.error(error)
@@ -340,16 +350,24 @@ export default function AsanaClone() {
   const handleDeleteTask = async (taskId: string) => {
     if (!confirm('このタスクを削除してもよろしいですか？')) return
     try {
+      // Optimistically remove from UI
+      setTasks(prev => prev.filter(t => t.id !== taskId))
+      setSelectedTask(null)
+
       const res = await fetch(`/api/tasks/${taskId}`, {
         method: 'DELETE'
       })
       if (res.ok) {
-        setSelectedTask(null)
-        await refreshTasks()
-        await refreshProjects()
+        refreshTasks()
+        refreshProjects()
+      } else {
+        alert('削除に失敗しました。データを再同期します。')
+        refreshTasks()
       }
     } catch (error) {
       console.error(error)
+      alert('エラーが発生しました。データを再同期します。')
+      refreshTasks()
     }
   }
 
@@ -390,6 +408,36 @@ export default function AsanaClone() {
     }
   }
 
+  // Handle adding member to active project
+  const handleAddMemberSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!activeProject || !memberEmailToAdd.trim()) return
+    setIsAddingMemberLoading(true)
+    setAddMemberError(null)
+    try {
+      const res = await fetch(`/api/projects/${activeProject.id}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: memberEmailToAdd })
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setIsAddingMemberToProj(false)
+        setMemberEmailToAdd('')
+        await refreshProjects()
+        // API returns the updated project with new members
+        setActiveProject(data)
+      } else {
+        setAddMemberError(data.error || 'メンバーの追加に失敗しました。')
+      }
+    } catch (err) {
+      console.error(err)
+      setAddMemberError('通信エラーが発生しました。')
+    } finally {
+      setIsAddingMemberLoading(false)
+    }
+  }
+
   // Drag and Drop implementation
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
     e.dataTransfer.setData('text/plain', taskId)
@@ -417,7 +465,7 @@ export default function AsanaClone() {
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: targetStatus } : t))
     
     // Save to DB
-    await handleUpdateTask(taskId, { status: targetStatus })
+    handleUpdateTask(taskId, { status: targetStatus })
   }
 
   // Filter tasks based on active project and assignee selection
@@ -721,6 +769,31 @@ export default function AsanaClone() {
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">
               {activeProject ? activeProject.name : 'すべてのタスク'}
             </h1>
+            {activeProject && (
+              <div className="flex items-center gap-2 ml-1">
+                {/* Project members list */}
+                <div className="flex -space-x-1.5 overflow-hidden">
+                  {(activeProject.members || []).map(member => (
+                    <div 
+                      key={member.id} 
+                      className="inline-block h-6 w-6 rounded-full bg-indigo-650 border-2 border-white flex items-center justify-center text-[10px] font-bold text-white shadow-sm shrink-0"
+                      title={member.name || member.email}
+                    >
+                      {member.name ? member.name[0] : member.email[0].toUpperCase()}
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Add member button */}
+                <button
+                  onClick={() => setIsAddingMemberToProj(true)}
+                  className="h-6 w-6 rounded-full bg-slate-100 hover:bg-slate-200 border border-slate-200 flex items-center justify-center text-slate-600 hover:text-indigo-600 transition-colors cursor-pointer active:scale-95"
+                  title="プロジェクトにメンバーを追加"
+                >
+                  <UserPlus className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
             <div className="h-4 w-[1px] bg-slate-200"></div>
             {/* View Selectors */}
             <div className="flex bg-slate-100 p-0.5 rounded-lg text-xs font-medium text-slate-600">
@@ -788,9 +861,10 @@ export default function AsanaClone() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
-                              handleUpdateTask(task.id, { 
-                                status: task.status === 'DONE' ? 'TODO' : 'DONE' 
-                              })
+                              const nextStatus = task.status === 'DONE' ? 'TODO' : 'DONE'
+                              // Optimistically update UI
+                              setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: nextStatus } : t))
+                              handleUpdateTask(task.id, { status: nextStatus })
                             }}
                             className={`h-5 w-5 rounded-full border flex items-center justify-center mr-3.5 shrink-0 transition-colors ${task.status === 'DONE' ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 hover:border-indigo-500 hover:bg-indigo-50/30'}`}
                           >
@@ -914,7 +988,7 @@ export default function AsanaClone() {
                           }`}
                         >
                           <div className="flex items-start justify-between gap-3">
-                            <span className="text-sm font-medium text-slate-800 line-clamp-2 leading-snug">
+                            <span className={`text-sm font-medium text-slate-800 line-clamp-2 leading-snug ${task.status === 'DONE' ? 'line-through text-slate-400' : ''}`}>
                               {task.title}
                             </span>
                           </div>
@@ -1097,11 +1171,13 @@ export default function AsanaClone() {
                     className="w-full bg-slate-50 border border-slate-200 text-xs font-medium rounded-lg p-2 outline-none focus:border-indigo-600"
                   >
                     <option value="">担当なし</option>
-                    {users.map(u => (
+                    {(projects.find(p => p.id === selectedTask.projectId)?.members || []).map(u => (
                       <option key={u.id} value={u.id}>{u.name || u.email}</option>
                     ))}
                   </select>
-                  {currentUser && selectedTask.assigneeId !== currentUser.id && (
+                  {currentUser && 
+                   selectedTask.assigneeId !== currentUser.id && 
+                   (projects.find(p => p.id === selectedTask.projectId)?.members || []).some(m => m.id === currentUser.id) && (
                     <button
                       type="button"
                       onClick={() => {
@@ -1250,7 +1326,7 @@ export default function AsanaClone() {
                     className="w-full border border-slate-200 rounded-lg px-3.5 py-2 text-sm outline-none focus:border-indigo-500 bg-white"
                   >
                     <option value="">担当者を選択...</option>
-                    {users.map(u => (
+                    {(projects.find(p => p.id === (newTaskProjId || activeProject?.id))?.members || []).map(u => (
                       <option key={u.id} value={u.id}>{u.name || u.email}</option>
                     ))}
                   </select>
@@ -1376,6 +1452,69 @@ export default function AsanaClone() {
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-lg shadow-indigo-600/10"
                 >
                   メンバーを追加
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADD MEMBER TO PROJECT */}
+      {isAddingMemberToProj && activeProject && (
+        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-50 backdrop-blur-[2px]">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl border border-slate-100 overflow-hidden transform transition-all duration-300">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+              <h2 className="font-bold text-slate-800">メンバーをプロジェクトに招待</h2>
+              <button 
+                onClick={() => {
+                  setIsAddingMemberToProj(false)
+                  setMemberEmailToAdd('')
+                  setAddMemberError(null)
+                }} 
+                className="text-slate-450 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleAddMemberSubmit} className="p-6 space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500">追加するユーザーのメールアドレス</label>
+                <input 
+                  type="email" 
+                  required
+                  placeholder="name@example.com"
+                  value={memberEmailToAdd}
+                  onChange={(e) => setMemberEmailToAdd(e.target.value)}
+                  className="w-full border border-slate-200 rounded-lg px-3.5 py-2 text-sm outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              {addMemberError && (
+                <p className="text-xs text-rose-600 font-medium">{addMemberError}</p>
+              )}
+
+              {/* Actions */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setIsAddingMemberToProj(false)
+                    setMemberEmailToAdd('')
+                    setAddMemberError(null)
+                  }}
+                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 rounded-lg text-xs font-semibold text-slate-650 cursor-pointer"
+                >
+                  キャンセル
+                </button>
+                <button 
+                  type="submit"
+                  disabled={isAddingMemberLoading}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-md disabled:opacity-50 cursor-pointer"
+                >
+                  {isAddingMemberLoading ? '追加中...' : '追加する'}
                 </button>
               </div>
             </form>
