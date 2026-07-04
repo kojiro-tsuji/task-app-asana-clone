@@ -53,6 +53,7 @@ export default function AsanaClone() {
   const [projects, setProjects] = useState<Project[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null)
 
   // Navigation / Filter states
@@ -91,19 +92,24 @@ export default function AsanaClone() {
           fetch('/api/tasks')
         ])
 
+        if (!usersRes.ok || !projectsRes.ok || !tasksRes.ok) {
+          throw new Error('API server returned 500 error. Database connection is likely offline.')
+        }
+
         const usersData = await usersRes.json()
         const projectsData = await projectsRes.json()
         const tasksData = await tasksRes.json()
 
-        setUsers(usersData)
-        setProjects(projectsData)
-        setTasks(tasksData)
+        if (Array.isArray(usersData)) setUsers(usersData)
+        if (Array.isArray(projectsData)) setProjects(projectsData)
+        if (Array.isArray(tasksData)) setTasks(tasksData)
 
-        if (projectsData.length > 0) {
+        if (Array.isArray(projectsData) && projectsData.length > 0) {
           setActiveProject(projectsData[0])
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to load data', error)
+        setErrorMsg(error.message || 'Failed to connect to the database. Please check your configurations.')
       } finally {
         setLoading(false)
       }
@@ -430,6 +436,21 @@ export default function AsanaClone() {
 
       {/* MAIN CONTAINER */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-white">
+        {errorMsg && (
+          <div className="bg-red-50 border-b border-red-200 px-8 py-3 text-xs md:text-sm text-red-800 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2">
+              <span className="font-bold">⚠️ データベース接続エラー:</span>
+              <span className="font-mono text-red-700">{errorMsg}</span>
+            </div>
+            <a 
+              href="/api/test-db" 
+              target="_blank" 
+              className="text-indigo-600 hover:text-indigo-800 font-semibold underline shrink-0 ml-4"
+            >
+              本番診断ツールを実行 ➔
+            </a>
+          </div>
+        )}
         
         {/* HEADER */}
         <header className="h-14 border-b border-slate-200 flex items-center justify-between px-8 bg-white shrink-0">
