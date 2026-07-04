@@ -10,9 +10,6 @@
   <img src="https://img.shields.io/badge/Vercel-Deploys-000000?style=for-the-badge&logo=vercel&logoColor=white" alt="Vercel" />
 </p>
 
-社内異動面談用ポートフォリオとして開発された、Asanaの操作感を忠実に再現したリッチなフルスタック・タスク管理ツールです。  
-Next.js (App Router) + Supabase (PostgreSQL / Prisma) のモダンなWeb3層構造を採用し、高品質なUI/UXと堅牢なセキュリティ、便利なメンバー間タスク受け渡しを最速で実現しました。
-
 ---
 
 ## 🔗 本番デモURL & ログイン情報
