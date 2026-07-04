@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { hashPassword } from '@/lib/auth'
 
 export async function GET() {
   try {
@@ -22,8 +23,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 })
     }
 
+    const defaultPasswordHash = hashPassword('password123', email)
+
     const user = await prisma.user.create({
-      data: { email, name },
+      data: { 
+        email, 
+        name,
+        password: defaultPasswordHash
+      },
     })
     return NextResponse.json(user, { status: 201 })
   } catch (error: any) {

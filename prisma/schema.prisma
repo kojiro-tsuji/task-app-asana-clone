@@ -15,6 +15,7 @@ model User {
   id        String   @id @default(uuid())
   email     String   @unique
   name      String?
+  password  String   @default("")
   tasks     Task[]
   createdAt DateTime @default(now())
 }

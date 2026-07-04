@@ -17,7 +17,8 @@ import {
   Trash2,
   Calendar,
   Layers,
-  Check
+  Check,
+  LogOut
 } from 'lucide-react'
 
 interface User {
@@ -49,6 +50,7 @@ interface Task {
 }
 
 export default function AsanaClone() {
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [users, setUsers] = useState<User[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
@@ -58,6 +60,7 @@ export default function AsanaClone() {
 
   // Navigation / Filter states
   const [activeProject, setActiveProject] = useState<Project | null>(null)
+  const [filterAssignee, setFilterAssignee] = useState<'all' | 'me'>('all')
   const [viewMode, setViewMode] = useState<'list' | 'board'>('board')
   
   // Selected Task for Slide-over
@@ -82,10 +85,23 @@ export default function AsanaClone() {
   // Inline Quick Add state
   const [inlineTaskTitles, setInlineTaskTitles] = useState<{ [key: string]: string }>({})
 
+  // Authentication states
+  const [loginEmail, setLoginEmail] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [loggingIn, setLoggingIn] = useState(false)
+
   // Fetch initial data
   useEffect(() => {
     async function initData() {
       try {
+        // Check session first
+        const meRes = await fetch('/api/auth/me')
+        const meData = await meRes.json()
+        if (meData.user) {
+          setCurrentUser(meData.user)
+        }
+
         const [usersRes, projectsRes, tasksRes] = await Promise.all([
           fetch('/api/users'),
           fetch('/api/projects'),
@@ -116,6 +132,47 @@ export default function AsanaClone() {
     }
     initData()
   }, [])
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoggingIn(true)
+    setAuthError(null)
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: loginEmail, password: loginPassword })
+      })
+      const data = await res.json()
+      if (res.ok && data.user) {
+        setCurrentUser(data.user)
+        // Refresh all list data to be secure
+        const [usersRes, projectsRes, tasksRes] = await Promise.all([
+          fetch('/api/users'),
+          fetch('/api/projects'),
+          fetch('/api/tasks')
+        ])
+        if (usersRes.ok) setUsers(await usersRes.json())
+        if (projectsRes.ok) setProjects(await projectsRes.json())
+        if (tasksRes.ok) setTasks(await tasksRes.json())
+      } else {
+        setAuthError(data.error || 'ログインに失敗しました')
+      }
+    } catch {
+      setAuthError('サーバー接続エラーが発生しました')
+    } finally {
+      setLoggingIn(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+      setCurrentUser(null)
+    } catch (err) {
+      console.error(err)
+    }
+  }
 
   // Refresh tasks function
   const refreshTasks = async () => {
@@ -312,10 +369,12 @@ export default function AsanaClone() {
     await handleUpdateTask(taskId, { status: targetStatus })
   }
 
-  // Filter tasks based on active project selection
-  const filteredTasks = activeProject 
-    ? tasks.filter(t => t.projectId === activeProject.id)
-    : tasks
+  // Filter tasks based on active project and assignee selection
+  const filteredTasks = tasks.filter(t => {
+    const matchesProject = activeProject ? t.projectId === activeProject.id : true
+    const matchesAssignee = filterAssignee === 'me' ? t.assigneeId === currentUser?.id : true
+    return matchesProject && matchesAssignee
+  })
 
   if (loading) {
     return (
@@ -333,6 +392,91 @@ export default function AsanaClone() {
     { id: 'IN_PROGRESS', title: '進行中', color: 'bg-amber-50 text-amber-700 border-amber-200' },
     { id: 'DONE', title: '完了', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
   ]
+
+  if (!currentUser) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-6">
+        <div className="w-full max-w-md bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 p-8 shadow-2xl space-y-6 text-white">
+          <div className="text-center space-y-2">
+            <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-600 shadow-lg shadow-indigo-600/30">
+              <Layers className="h-6 w-6 text-white" />
+            </div>
+            <h2 className="text-2xl font-bold tracking-tight">Asana Clone</h2>
+            <p className="text-xs text-indigo-200 font-medium">プロ仕様タスク管理プラットフォーム</p>
+          </div>
+
+          {authError && (
+            <div className="p-3 bg-rose-500/20 border border-rose-500/40 rounded-xl text-rose-200 text-xs font-semibold text-center">
+              ⚠️ {authError}
+            </div>
+          )}
+
+          <form onSubmit={handleLogin} className="space-y-4 text-slate-900">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">メールアドレス</label>
+              <input
+                type="email"
+                required
+                placeholder="email@example.com"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                className="w-full bg-white/95 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">パスワード</label>
+              <input
+                type="password"
+                required
+                placeholder="••••••••"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                className="w-full bg-white/95 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loggingIn}
+              className="flex items-center justify-center w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-semibold transition-all duration-200 shadow-lg shadow-indigo-600/30 active:scale-[0.98] disabled:opacity-50 cursor-pointer"
+            >
+              {loggingIn ? 'ログイン中...' : 'ログイン'}
+            </button>
+          </form>
+
+          {/* Quick Demo Login Box */}
+          <div className="pt-4 border-t border-white/10 space-y-3">
+            <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider text-center">デモアカウントでクイックログイン</div>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginEmail('yamada@example.com')
+                  setLoginPassword('password123')
+                }}
+                className="py-2.5 px-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 rounded-xl text-xs text-indigo-200 hover:text-white transition-all text-left font-medium cursor-pointer"
+              >
+                <div className="font-bold text-white">山田 太郎</div>
+                <div className="opacity-70 text-[10px]">yamada@example.com</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginEmail('sato@example.com')
+                  setLoginPassword('password123')
+                }}
+                className="py-2.5 px-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 rounded-xl text-xs text-indigo-200 hover:text-white transition-all text-left font-medium cursor-pointer"
+              >
+                <div className="font-bold text-white">佐藤 美咲</div>
+                <div className="opacity-70 text-[10px]">sato@example.com</div>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 font-sans">
@@ -373,8 +517,11 @@ export default function AsanaClone() {
             <ul className="space-y-1">
               <li>
                 <button
-                  onClick={() => setActiveProject(null)}
-                  className={`flex items-center gap-3 w-full px-3 py-2 text-sm rounded-lg transition-all duration-150 ${!activeProject ? 'bg-slate-800 text-white font-medium shadow-inner' : 'hover:bg-slate-800/50 hover:text-white'}`}
+                  onClick={() => {
+                    setActiveProject(null)
+                    setFilterAssignee('all')
+                  }}
+                  className={`flex items-center gap-3 w-full px-3 py-2 text-sm rounded-lg transition-all duration-150 ${!activeProject && filterAssignee === 'all' ? 'bg-slate-800 text-white font-medium shadow-inner' : 'hover:bg-slate-800/50 hover:text-white'}`}
                 >
                   <Folder className="h-4 w-4 text-slate-400" />
                   <span className="truncate">すべてのタスク</span>
@@ -383,6 +530,23 @@ export default function AsanaClone() {
                   </span>
                 </button>
               </li>
+              {currentUser && (
+                <li>
+                  <button
+                    onClick={() => {
+                      setActiveProject(null)
+                      setFilterAssignee('me')
+                    }}
+                    className={`flex items-center gap-3 w-full px-3 py-2 text-sm rounded-lg transition-all duration-150 ${filterAssignee === 'me' ? 'bg-indigo-900/60 text-indigo-100 font-medium shadow-inner' : 'hover:bg-slate-800/50 hover:text-white'}`}
+                  >
+                    <CheckCircle2 className="h-4 w-4 text-indigo-400" />
+                    <span className="truncate">マイタスク (自分宛)</span>
+                    <span className="ml-auto text-xs py-0.5 px-1.5 bg-indigo-950 rounded-full text-indigo-300">
+                      {tasks.filter(t => t.assigneeId === currentUser.id).length}
+                    </span>
+                  </button>
+                </li>
+              )}
               {projects.map(proj => (
                 <li key={proj.id}>
                   <button
@@ -427,11 +591,27 @@ export default function AsanaClone() {
           </div>
         </div>
 
-        {/* Sidebar Footer Info */}
-        <div className="p-4 border-t border-slate-800 text-xs text-slate-500 shrink-0 text-center">
-          <p>Asana Clone v1.0.0</p>
-          <p className="mt-1 font-mono text-[10px]">Supabase & Prisma Fullstack</p>
-        </div>
+        {/* Sidebar Footer Logged-in User info */}
+        {currentUser && (
+          <div className="p-4 border-t border-slate-800 flex items-center justify-between gap-2 shrink-0">
+            <div className="flex items-center gap-2 overflow-hidden">
+              <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                {currentUser.name ? currentUser.name[0] : currentUser.email[0].toUpperCase()}
+              </div>
+              <div className="text-left overflow-hidden">
+                <div className="text-xs font-bold text-white truncate">{currentUser.name || 'ユーザー'}</div>
+                <div className="text-[10px] text-slate-500 truncate">{currentUser.email}</div>
+              </div>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-rose-450 rounded-lg transition-all"
+              title="ログアウト"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </aside>
 
       {/* MAIN CONTAINER */}
@@ -835,6 +1015,18 @@ export default function AsanaClone() {
                       <option key={u.id} value={u.id}>{u.name || u.email}</option>
                     ))}
                   </select>
+                  {currentUser && selectedTask.assigneeId !== currentUser.id && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedTask({ ...selectedTask, assigneeId: currentUser.id })
+                        handleUpdateTask(selectedTask.id, { assigneeId: currentUser.id })
+                      }}
+                      className="mt-1 text-[10px] text-indigo-600 hover:text-indigo-850 font-semibold flex items-center gap-1 active:scale-95 transition-all text-left"
+                    >
+                      <UserIcon className="h-3 w-3" /> 自分に割り当てる (マイタスクに追加)
+                    </button>
+                  )}
                 </div>
               </div>
 
