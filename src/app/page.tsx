@@ -18,7 +18,9 @@ import {
   Calendar,
   Layers,
   Check,
-  LogOut
+  LogOut,
+  Settings,
+  Search
 } from 'lucide-react'
 
 interface User {
@@ -444,6 +446,61 @@ export default function AsanaClone() {
         setMemberEmailToAdd('')
         await refreshProjects()
         // API returns the updated project with new members
+        setActiveProject(data)
+      } else {
+        setAddMemberError(data.error || 'メンバーの追加に失敗しました。')
+      }
+    } catch (err) {
+      console.error(err)
+      setAddMemberError('通信エラーが発生しました。')
+    } finally {
+      setIsAddingMemberLoading(false)
+    }
+  }
+
+  // Handle removing member from project
+  const handleRemoveMember = async (userId: string) => {
+    if (!activeProject) return
+    if (!confirm('このメンバーをプロジェクトから削除しますか？')) return
+    
+    setIsAddingMemberLoading(true)
+    setAddMemberError(null)
+    try {
+      const res = await fetch(`/api/projects/${activeProject.id}/members`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      })
+      const data = await res.json()
+      if (res.ok) {
+        await refreshProjects()
+        setActiveProject(data)
+      } else {
+        setAddMemberError(data.error || 'メンバーの削除に失敗しました。')
+      }
+    } catch (err) {
+      console.error(err)
+      setAddMemberError('通信エラーが発生しました。')
+    } finally {
+      setIsAddingMemberLoading(false)
+    }
+  }
+
+  // Handle adding member by selecting from filtered list
+  const handleAddMemberByUserId = async (userId: string) => {
+    if (!activeProject) return
+    setIsAddingMemberLoading(true)
+    setAddMemberError(null)
+    try {
+      const res = await fetch(`/api/projects/${activeProject.id}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: userId })
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setMemberEmailToAdd('') // Clear query
+        await refreshProjects()
         setActiveProject(data)
       } else {
         setAddMemberError(data.error || 'メンバーの追加に失敗しました。')
@@ -1484,13 +1541,16 @@ export default function AsanaClone() {
         </div>
       )}
 
-      {/* MODAL: ADD MEMBER TO PROJECT */}
+      {/* MODAL: ADD/MANAGE MEMBER TO PROJECT */}
       {isAddingMemberToProj && activeProject && (
         <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-50 backdrop-blur-[2px]">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl border border-slate-100 overflow-hidden transform transition-all duration-300">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-slate-100 overflow-hidden transform transition-all duration-300 flex flex-col max-h-[85vh]">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-              <h2 className="font-bold text-slate-800">メンバーをプロジェクトに招待</h2>
+              <div>
+                <h2 className="font-bold text-slate-800">メンバー管理</h2>
+                <p className="text-[11px] text-slate-400 mt-0.5">{activeProject.name}</p>
+              </div>
               <button 
                 onClick={() => {
                   setIsAddingMemberToProj(false)
@@ -1503,46 +1563,114 @@ export default function AsanaClone() {
               </button>
             </div>
 
-            {/* Form */}
-            <form onSubmit={handleAddMemberSubmit} className="p-6 space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-500">追加するユーザーのメールアドレスまたはお名前</label>
-                <input 
-                  type="text" 
-                  required
-                  placeholder="例: name@example.com または 佐藤"
-                  value={memberEmailToAdd}
-                  onChange={(e) => setMemberEmailToAdd(e.target.value)}
-                  className="w-full border border-slate-200 rounded-lg px-3.5 py-2 text-sm outline-none focus:border-indigo-500 bg-white"
-                />
+            <div className="p-6 flex-1 overflow-y-auto space-y-5">
+              {/* Search & Add User Section */}
+              <div className="space-y-2 relative">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">メンバーを検索して追加</label>
+                <div className="relative">
+                  <input 
+                    type="text" 
+                    placeholder="名前またはメールアドレスを入力..."
+                    value={memberEmailToAdd}
+                    onChange={(e) => setMemberEmailToAdd(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:border-indigo-500 bg-white"
+                  />
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                </div>
+
+                {/* Incremental Search Dropdown */}
+                {memberEmailToAdd.trim() && (
+                  <div className="absolute left-0 right-0 z-10 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto custom-scrollbar">
+                    {(() => {
+                      const query = memberEmailToAdd.toLowerCase().trim()
+                      const filteredUsers = users.filter(u => 
+                        !(activeProject.members || []).some(m => m.id === u.id) &&
+                        ((u.name && u.name.toLowerCase().includes(query)) || u.email.toLowerCase().includes(query))
+                      )
+
+                      if (filteredUsers.length === 0) {
+                        return <div className="p-3 text-xs text-slate-400 text-center">該当するユーザーが見つかりません。</div>
+                      }
+
+                      return filteredUsers.map(user => (
+                        <button
+                          key={user.id}
+                          type="button"
+                          onClick={() => handleAddMemberByUserId(user.id)}
+                          className="w-full text-left px-4 py-2 text-xs hover:bg-indigo-50 flex items-center justify-between transition-colors border-b border-slate-50 last:border-b-0 cursor-pointer"
+                        >
+                          <div>
+                            <span className="font-semibold text-slate-700 block">{user.name || '名前なし'}</span>
+                            <span className="text-slate-400 text-[10px]">{user.email}</span>
+                          </div>
+                          <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded hover:bg-indigo-100">
+                            追加
+                          </span>
+                        </button>
+                      ))
+                    })()}
+                  </div>
+                )}
               </div>
 
               {addMemberError && (
                 <p className="text-xs text-rose-600 font-medium">{addMemberError}</p>
               )}
 
-              {/* Actions */}
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                <button 
-                  type="button"
-                  onClick={() => {
-                    setIsAddingMemberToProj(false)
-                    setMemberEmailToAdd('')
-                    setAddMemberError(null)
-                  }}
-                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 rounded-lg text-xs font-semibold text-slate-650 cursor-pointer"
-                >
-                  キャンセル
-                </button>
-                <button 
-                  type="submit"
-                  disabled={isAddingMemberLoading}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-md disabled:opacity-50 cursor-pointer"
-                >
-                  {isAddingMemberLoading ? '追加中...' : '追加する'}
-                </button>
+              {/* Current Members List Section */}
+              <div className="space-y-2 flex-1 flex flex-col min-h-0">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">プロジェクトメンバー ({ (activeProject.members || []).length }人)</label>
+                <div className="border border-slate-100 rounded-xl overflow-hidden divide-y divide-slate-100 max-h-60 overflow-y-auto custom-scrollbar bg-slate-50/30">
+                  {(activeProject.members || []).length === 0 ? (
+                    <div className="p-6 text-xs text-slate-400 text-center">メンバーはいません。</div>
+                  ) : (
+                    (activeProject.members || []).map(member => (
+                      <div key={member.id} className="flex items-center justify-between p-3 bg-white">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-7 w-7 rounded-full bg-indigo-600 flex items-center justify-center text-[11px] font-bold text-white shadow-sm shrink-0">
+                            {member.name ? member.name[0] : member.email[0].toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <span className="text-xs font-semibold text-slate-700 block truncate">
+                              {member.name || '名前なし'}
+                              {currentUser && member.id === currentUser.id && (
+                                <span className="ml-1 text-[9px] bg-slate-100 text-slate-500 px-1 rounded">自分</span>
+                              )}
+                            </span>
+                            <span className="text-[10px] text-slate-400 block truncate">{member.email}</span>
+                          </div>
+                        </div>
+                        {currentUser && member.id !== currentUser.id && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveMember(member.id)}
+                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-all cursor-pointer"
+                            title="このメンバーをプロジェクトから削除"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
-            </form>
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end gap-3 p-4 bg-slate-50 border-t border-slate-100">
+              <button 
+                type="button"
+                onClick={() => {
+                  setIsAddingMemberToProj(false)
+                  setMemberEmailToAdd('')
+                  setAddMemberError(null)
+                }}
+                className="px-4 py-2 border border-slate-200 hover:bg-slate-100 rounded-lg text-xs font-semibold text-slate-650 cursor-pointer bg-white"
+              >
+                閉じる
+              </button>
+            </div>
           </div>
         </div>
       )}

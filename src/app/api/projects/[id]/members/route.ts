@@ -18,6 +18,7 @@ export async function POST(
     const user = await prisma.user.findFirst({
       where: {
         OR: [
+          { id: searchQuery },
           { email: searchQuery },
           { name: { contains: searchQuery, mode: 'insensitive' } }
         ]
@@ -59,5 +60,37 @@ export async function POST(
   } catch (error) {
     console.error('Add member error:', error)
     return NextResponse.json({ error: 'メンバーの追加に失敗しました。' }, { status: 500 })
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    const body = await request.json()
+    const { userId } = body
+
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
+    }
+
+    const updatedProject = await prisma.project.update({
+      where: { id },
+      data: {
+        members: {
+          disconnect: { id: userId },
+        },
+      },
+      include: {
+        members: true,
+      },
+    })
+
+    return NextResponse.json(updatedProject)
+  } catch (error) {
+    console.error('Remove member error:', error)
+    return NextResponse.json({ error: 'メンバーの削除に失敗しました。' }, { status: 500 })
   }
 }
