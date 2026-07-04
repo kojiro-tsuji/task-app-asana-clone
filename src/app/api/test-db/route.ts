@@ -24,7 +24,7 @@ export async function GET() {
     for (const region of regions) {
       const key = `${provider}-${region}`
       const encodedPassword = "z-JJtz6%21HSq6jgK"
-      const url = `postgresql://postgres.yakqeblvqcpztgwbofeo:${encodedPassword}@${provider}.${region}.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1`
+      const url = `postgresql://postgres.yakqeblvqcpztgwbofeo:${encodedPassword}@${provider}-${region}.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1`
       
       try {
         const client = new PrismaClient({
@@ -42,7 +42,7 @@ export async function GET() {
         } else if (msg.includes('authentication failed') || msg.includes('password')) {
           results[key] = "🔑 Correct Region! But Password Auth Failed"
         } else {
-          // Connection timed out or DNS error, omit to keep output readable
+          results[key] = `❓ Error: ${msg.substring(0, 60)}`
         }
       }
     }
