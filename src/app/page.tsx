@@ -440,15 +440,22 @@ export default function AsanaClone() {
 
   // Drag and Drop implementation
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
+    e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', taskId)
+    
+    // Force grabbing cursor globally during drag
+    document.body.classList.add('grabbing-active')
+
     // Defer setting the state to allow the browser to capture an opaque ghost image of the card
     setTimeout(() => {
       setDraggingTaskId(taskId)
-    }, 0)
+    }, 100)
   }
 
   const handleDragEnd = () => {
     setDraggingTaskId(null)
+    // Remove global grabbing cursor constraint
+    document.body.classList.remove('grabbing-active')
   }
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -983,7 +990,7 @@ export default function AsanaClone() {
                           onDragStart={(e) => handleDragStart(e, task.id)}
                           onDragEnd={handleDragEnd}
                           onClick={() => setSelectedTask(task)}
-                          className={`bg-white p-4 border border-slate-200 rounded-xl shadow-sm hover:shadow-md cursor-grab active:cursor-grabbing transition-all group relative border-l-4 border-l-indigo-500/35 ${
+                          className={`bg-white p-4 border border-slate-200 rounded-xl shadow-sm hover:shadow-md cursor-pointer transition-shadow duration-200 group relative border-l-4 border-l-indigo-500/35 ${
                             draggingTaskId === task.id ? 'opacity-40 border-dashed border-indigo-400 bg-indigo-50/10' : ''
                           }`}
                         >
