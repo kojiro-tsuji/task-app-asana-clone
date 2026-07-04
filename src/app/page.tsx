@@ -197,10 +197,11 @@ export default function AsanaClone() {
       setTasks(data)
       
       // Update selected task reference if open
-      if (selectedTask) {
-        const updated = data.find((t: Task) => t.id === selectedTask.id)
-        if (updated) setSelectedTask(updated)
-      }
+      setSelectedTask(prev => {
+        if (!prev) return null
+        const updated = data.find((t: Task) => t.id === prev.id)
+        return updated || prev
+      })
     } catch (error) {
       console.error(error)
     }
