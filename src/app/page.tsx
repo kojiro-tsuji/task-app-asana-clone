@@ -860,31 +860,7 @@ export default function AsanaClone() {
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">
               {activeProject ? activeProject.name : (filterAssignee === 'me' ? 'マイタスク' : 'すべてのタスク')}
             </h1>
-            {activeProject && (
-              <div className="flex items-center gap-2 ml-1">
-                {/* Project members list */}
-                <div className="flex -space-x-1.5 overflow-hidden">
-                  {(activeProject.members || []).map(member => (
-                    <div 
-                      key={member.id} 
-                      className="inline-block h-6 w-6 rounded-full bg-indigo-650 border-2 border-white flex items-center justify-center text-[10px] font-bold text-white shadow-sm shrink-0"
-                      title={member.name || member.email}
-                    >
-                      {member.name ? member.name[0] : member.email[0].toUpperCase()}
-                    </div>
-                  ))}
-                </div>
-                
-                {/* Add member button */}
-                <button
-                  onClick={() => setIsAddingMemberToProj(true)}
-                  className="h-6 w-6 rounded-full bg-slate-100 hover:bg-slate-200 border border-slate-200 flex items-center justify-center text-slate-600 hover:text-indigo-600 transition-colors cursor-pointer active:scale-95"
-                  title="プロジェクトにメンバーを追加"
-                >
-                  <UserPlus className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )}
+
             <div className="h-4 w-[1px] bg-slate-200"></div>
             {/* View Selectors */}
             <div className="flex bg-slate-100 p-0.5 rounded-lg text-xs font-medium text-slate-600">
@@ -905,9 +881,23 @@ export default function AsanaClone() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
+            {/* Project Member Add Button */}
+            {activeProject && (
+              <button
+                onClick={() => setIsAddingMemberToProj(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 rounded-lg transition-all cursor-pointer active:scale-95"
+                title="プロジェクトにメンバーを追加"
+              >
+                <UserPlus className="h-3.5 w-3.5" />
+                <span>メンバー追加</span>
+              </button>
+            )}
+
+            {activeProject && <div className="h-4 w-[1px] bg-slate-200"></div>}
+
             {/* Quick Stats */}
-            <div className="text-xs text-slate-500 mr-2 flex items-center gap-3">
+            <div className="text-xs text-slate-500 flex items-center gap-3">
               <span className="flex items-center gap-1">
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
                 {filteredTasks.filter(t => t.status === 'DONE').length} 完了
