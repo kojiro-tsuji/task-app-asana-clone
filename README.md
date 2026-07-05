@@ -61,32 +61,38 @@
 本アプリケーションは、Next.jsのAPI Routes（Route Handlers）を活用し、余計な外部サーバーを使わない「Next.js + Supabase」の効率的なサーバーレス・Web3層構造で完結しています。
 
 ```mermaid
-graph LR
+graph TD
     %% スタイル定義
-    classDef client fill:#e0f2fe,stroke:#0284c7,stroke-width:2px;
-    classDef server fill:#f3e8ff,stroke:#7c3aed,stroke-width:2px;
-    classDef db fill:#ecfdf5,stroke:#059669,stroke-width:2px;
+    classDef client fill:#e0f2fe,stroke:#0284c7,stroke-width:2px,color:#0f172a;
+    classDef backend fill:#f3e8ff,stroke:#7c3aed,stroke-width:2px,color:#0f172a;
+    classDef db fill:#ecfdf5,stroke:#059669,stroke-width:2px,color:#0f172a;
 
     subgraph Client ["🌐 フロントエンド (ブラウザ)"]
-        UI["🎨 React 19 / Tailwind CSS"]:::client
-        Dnd["📦 HTML5 Drag & Drop (楽観的UI更新)"]:::client
+        UI["🎨 React 19 / Tailwind CSS v4<br>(ユーザーインターフェース)"]:::client
+        State["⚡ 楽観的UI更新 (Optimistic UI)<br>(操作した瞬間にReact Stateを即座に変更)"]:::client
     end
 
-    subgraph Backend ["⚙️ バックエンド (API / Web Server)"]
-        NextAPI["⚡ Next.js App Router API Routes"]:::server
-        Auth["🔑 JWT / PBKDF2 暗号化モジュール"]:::server
-        Prisma["💎 Prisma ORM (シングルトンパターン)"]:::server
+    subgraph Vercel ["⚡ Vercel (サーバーレス・バックエンド API)"]
+        NextAPI["⚙️ Next.js API Routes (Route Handlers)<br>(リクエストの受信とレスポンス返却)"]:::backend
+        Auth["🔑 自作認証モジュール (crypto)<br>(セッション検証・パスワード暗号化)"]:::backend
+        Prisma["💎 Prisma ORM (シングルトンパターン)<br>(データベースクエリの生成)"]:::backend
     end
 
-    subgraph Database ["💾 クラウドデータベース"]
-        SupaDB["⚡ Supabase Cloud (PostgreSQL)"]:::db
+    subgraph Supabase ["💾 Supabase (クラウドデータベース)"]
+        SupaDB["🐘 PostgreSQL Database<br>(シドニー / 接続プール経由で接続)"]:::db
     end
 
-    UI -->|"① ユーザー操作 (ドラッグ等)"| Dnd
-    Dnd -->|"② 非同期リクエスト (JSON / Cookie)"| NextAPI
-    NextAPI -->|"③ セッション検証 / 暗号化"| Auth
-    NextAPI -->|"④ データベース操作"| Prisma
-    Prisma -->|"⑤ 接続プーラー経由 (5432 / 6543)"| SupaDB
+    %% フローの接続
+    UI -->|"操作を検知"| State
+    State -->|"① HTTP非同期リクエスト (JSON/Cookie)"| NextAPI
+    NextAPI -->|"② 署名/セッション検証"| Auth
+    NextAPI -->|"③ クエリ処理依頼"| Prisma
+    Prisma -->|"④ プーラー経由接続 (Port 6543 / 5432)"| SupaDB
+
+    %% サブグラフのスタイル調整
+    style Client fill:#f8fafc,stroke:#cbd5e1,stroke-width:1px
+    style Vercel fill:#faf5ff,stroke:#e9d5ff,stroke-width:1px
+    style Supabase fill:#f0fdf4,stroke:#bbf7d0,stroke-width:1px
 ```
 
 ### 📊 データベース定義 (ER図)
