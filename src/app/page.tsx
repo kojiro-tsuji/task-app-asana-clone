@@ -307,9 +307,17 @@ export default function AsanaClone() {
   }
 
   // Handle Task Creation (Inline Quick Add)
-  const handleCreateTaskInline = async (status: string, projectId: string) => {
+  const handleCreateTaskInline = async (status: string, projectId?: string) => {
     const title = inlineTaskTitles[status] || ''
     if (!title.trim()) return
+
+    const targetProjectId = projectId || projects[0]?.id
+    if (!targetProjectId) {
+      alert('プロジェクトが存在しないため、タスクを作成できません。先に左側のサイドバーからプロジェクトを作成してください。')
+      return
+    }
+
+    const targetAssigneeId = filterAssignee === 'me' ? currentUser?.id : null
 
     try {
       const res = await fetch('/api/tasks', {
@@ -318,7 +326,8 @@ export default function AsanaClone() {
         body: JSON.stringify({
           title,
           status,
-          projectId
+          projectId: targetProjectId,
+          assigneeId: targetAssigneeId
         })
       })
       if (res.ok) {
@@ -1010,7 +1019,7 @@ export default function AsanaClone() {
                       ))}
 
                       {/* Quick Inline Task Creator */}
-                      {activeProject && (
+                      {projects.length > 0 && (
                         <div className="flex items-center px-5 py-2.5 bg-slate-50/20">
                           <Plus className="h-4 w-4 text-slate-400 mr-3" />
                           <input 
@@ -1020,7 +1029,7 @@ export default function AsanaClone() {
                             onChange={(e) => setInlineTaskTitles({ ...inlineTaskTitles, [col.id]: e.target.value })}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
-                                handleCreateTaskInline(col.id, activeProject.id)
+                                handleCreateTaskInline(col.id, activeProject?.id)
                               }
                             }}
                             className="bg-transparent border-none outline-none text-sm w-full text-slate-700 placeholder-slate-400"
@@ -1125,7 +1134,7 @@ export default function AsanaClone() {
                     </div>
 
                     {/* Inline Quick Add Button */}
-                    {activeProject && (
+                    {projects.length > 0 && (
                       <div className="mt-3 pt-2 border-t border-slate-200/50">
                         <input 
                           type="text" 
@@ -1134,7 +1143,7 @@ export default function AsanaClone() {
                           onChange={(e) => setInlineTaskTitles({ ...inlineTaskTitles, [col.id]: e.target.value })}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
-                              handleCreateTaskInline(col.id, activeProject.id)
+                              handleCreateTaskInline(col.id, activeProject?.id)
                             }
                           }}
                           className="w-full bg-white border border-slate-200 rounded-lg py-2 px-3 text-xs outline-none focus:border-indigo-500 placeholder-slate-400"
