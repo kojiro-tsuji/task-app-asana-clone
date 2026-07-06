@@ -103,6 +103,21 @@ export default function AsanaClone() {
   const [authError, setAuthError] = useState<string | null>(null)
   const [loggingIn, setLoggingIn] = useState(false)
 
+  // Undo task deletion states
+  const [undoTask, setUndoTask] = useState<Task | null>(null)
+  const [undoTimeoutId, setUndoTimeoutId] = useState<any>(null)
+  const [showToast, setShowToast] = useState(false)
+  const [toastMessage, setToastMessage] = useState('')
+
+  // Cleanup undo timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (undoTimeoutId) {
+        clearTimeout(undoTimeoutId)
+      }
+    }
+  }, [undoTimeoutId])
+
   // Fetch initial data
   useEffect(() => {
     async function initData() {
@@ -277,32 +292,60 @@ export default function AsanaClone() {
       return
     }
 
+    const tempId = `temp-${Date.now()}`
+    const targetProject = projects.find(p => p.id === targetProjId)
+    const targetAssignee = users.find(u => u.id === newTaskAssignee) || null
+
+    const tempTask: Task = {
+      id: tempId,
+      title: newTaskTitle,
+      description: newTaskDesc || null,
+      status: newTaskStatus,
+      dueDate: newTaskDueDate || null,
+      projectId: targetProjId,
+      project: targetProject || { id: targetProjId, name: '読み込み中...' },
+      assigneeId: newTaskAssignee || null,
+      assignee: targetAssignee,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+
+    // Optimistically update UI
+    setTasks(prev => [tempTask, ...prev])
+    setNewTaskTitle('')
+    setNewTaskDesc('')
+    setNewTaskDueDate('')
+    setNewTaskAssignee('')
+    setIsAddingTask(false)
+
     try {
       const res = await fetch('/api/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: newTaskTitle,
-          description: newTaskDesc,
-          status: newTaskStatus,
-          dueDate: newTaskDueDate || null,
-          projectId: targetProjId,
-          assigneeId: newTaskAssignee || null
+          title: tempTask.title,
+          description: tempTask.description,
+          status: tempTask.status,
+          dueDate: tempTask.dueDate,
+          projectId: tempTask.projectId,
+          assigneeId: tempTask.assigneeId
         })
       })
       if (res.ok) {
         const createdTask = await res.json()
-        setNewTaskTitle('')
-        setNewTaskDesc('')
-        setNewTaskDueDate('')
-        setNewTaskAssignee('')
-        setIsAddingTask(false)
-        setTasks(prev => [createdTask, ...prev])
-        refreshTasks()
+        // Replace temp task with real task from DB
+        setTasks(prev => prev.map(t => t.id === tempId ? createdTask : t))
         refreshProjects()
+      } else {
+        // Rollback
+        setTasks(prev => prev.filter(t => t.id !== tempId))
+        alert('タスクの作成に失敗しました。')
       }
     } catch (error) {
+      // Rollback
+      setTasks(prev => prev.filter(t => t.id !== tempId))
       console.error(error)
+      alert('タスク作成中にエラーが発生しました。')
     }
   }
 
@@ -317,28 +360,57 @@ export default function AsanaClone() {
       return
     }
 
-    const targetAssigneeId = filterAssignee === 'me' ? currentUser?.id : null
+    const targetAssigneeId = filterAssignee === 'me' ? (currentUser?.id ?? null) : null
+    const tempId = `temp-${Date.now()}`
+    const targetProject = projects.find(p => p.id === targetProjectId)
+    const targetAssignee = currentUser && filterAssignee === 'me' ? currentUser : null
+
+    const tempTask: Task = {
+      id: tempId,
+      title,
+      description: null,
+      status,
+      dueDate: null,
+      projectId: targetProjectId,
+      project: targetProject || { id: targetProjectId, name: '読み込み中...' },
+      assigneeId: targetAssigneeId,
+      assignee: targetAssignee,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+
+    // Optimistically update UI
+    setTasks(prev => [tempTask, ...prev])
+    setInlineTaskTitles(prev => ({ ...prev, [status]: '' }))
 
     try {
       const res = await fetch('/api/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title,
-          status,
-          projectId: targetProjectId,
-          assigneeId: targetAssigneeId
+          title: tempTask.title,
+          status: tempTask.status,
+          projectId: tempTask.projectId,
+          assigneeId: tempTask.assigneeId
         })
       })
       if (res.ok) {
         const createdTask = await res.json()
-        setInlineTaskTitles(prev => ({ ...prev, [status]: '' }))
-        setTasks(prev => [createdTask, ...prev])
-        refreshTasks()
+        // Replace temp task with real task from DB
+        setTasks(prev => prev.map(t => t.id === tempId ? createdTask : t))
         refreshProjects()
+      } else {
+        // Rollback
+        setTasks(prev => prev.filter(t => t.id !== tempId))
+        setInlineTaskTitles(prev => ({ ...prev, [status]: title }))
+        alert('タスクの作成に失敗しました。')
       }
     } catch (error) {
+      // Rollback
+      setTasks(prev => prev.filter(t => t.id !== tempId))
+      setInlineTaskTitles(prev => ({ ...prev, [status]: title }))
       console.error(error)
+      alert('タスク作成中にエラーが発生しました。')
     }
   }
 
@@ -359,29 +431,69 @@ export default function AsanaClone() {
     }
   }
 
-  // Handle Task Delete
-  const handleDeleteTask = async (taskId: string) => {
-    if (!confirm('このタスクを削除してもよろしいですか？')) return
+  // Helper to execute actual task delete via API
+  const executeDeleteTask = async (taskId: string) => {
     try {
-      // Optimistically remove from UI
-      setTasks(prev => prev.filter(t => t.id !== taskId))
-      setSelectedTask(null)
-
       const res = await fetch(`/api/tasks/${taskId}`, {
         method: 'DELETE'
       })
       if (res.ok) {
-        refreshTasks()
         refreshProjects()
       } else {
-        alert('削除に失敗しました。データを再同期します。')
-        refreshTasks()
+        console.error('Failed to delete task on server')
       }
     } catch (error) {
       console.error(error)
-      alert('エラーが発生しました。データを再同期します。')
-      refreshTasks()
     }
+  }
+
+  // Handle Task Delete (Undo supported, confirm dialog removed)
+  const handleDeleteTask = async (taskId: string) => {
+    // If there is an ongoing deletion, commit it first
+    if (undoTimeoutId) {
+      clearTimeout(undoTimeoutId)
+      if (undoTask) {
+        await executeDeleteTask(undoTask.id)
+      }
+    }
+
+    const taskToDelete = tasks.find(t => t.id === taskId)
+    if (!taskToDelete) return
+
+    // Optimistically remove from UI
+    setTasks(prev => prev.filter(t => t.id !== taskId))
+    if (selectedTask?.id === taskId) {
+      setSelectedTask(null)
+    }
+    setUndoTask(taskToDelete)
+    setToastMessage(`タスク「${taskToDelete.title}」を削除しました。`)
+    setShowToast(true)
+
+    // Set a timer to execute the delete in 5 seconds
+    const timeoutId = setTimeout(async () => {
+      await executeDeleteTask(taskId)
+      setShowToast(false)
+      setUndoTask(null)
+      setUndoTimeoutId(null)
+    }, 5000)
+
+    setUndoTimeoutId(timeoutId)
+  }
+
+  // Undo Delete Handler
+  const handleUndoDelete = () => {
+    if (undoTimeoutId) {
+      clearTimeout(undoTimeoutId)
+      setUndoTimeoutId(null)
+    }
+
+    if (undoTask) {
+      // Restore task to tasks list (putting it back to state)
+      setTasks(prev => [undoTask, ...prev])
+      setUndoTask(null)
+    }
+
+    setShowToast(false)
   }
 
   // Handle Slide-over Close and Save
@@ -585,9 +697,9 @@ export default function AsanaClone() {
 
   if (!currentUser) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-6">
-        <div className="w-full max-w-md bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 p-8 shadow-2xl space-y-6 text-white">
-          <div className="text-center space-y-2">
+      <div className="flex min-h-screen items-start justify-center bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-6 pt-[10vh] md:pt-[15vh]">
+        <div className="w-full max-w-md bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 p-8 shadow-2xl flex flex-col text-white">
+          <div className="text-center space-y-2 mb-6">
             <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-600 shadow-lg shadow-indigo-600/30">
               <Layers className="h-6 w-6 text-white" />
             </div>
@@ -596,7 +708,7 @@ export default function AsanaClone() {
           </div>
 
           {/* Toggle between Login and Signup */}
-          <div className="flex bg-white/5 p-1 rounded-xl text-xs font-semibold text-center select-none border border-white/5">
+          <div className="flex bg-white/5 p-1 rounded-xl text-xs font-semibold text-center select-none border border-white/5 mb-6">
             <button
               type="button"
               onClick={() => {
@@ -620,27 +732,27 @@ export default function AsanaClone() {
           </div>
 
           {authError && (
-            <div className="p-3 bg-rose-500/20 border border-rose-500/40 rounded-xl text-rose-200 text-xs font-semibold text-center">
+            <div className="p-3 bg-rose-500/20 border border-rose-500/40 rounded-xl text-rose-200 text-xs font-semibold text-center mb-6">
               ⚠️ {authError}
             </div>
           )}
 
-          <form onSubmit={handleAuth} className="space-y-4 text-slate-900">
-            {isSignup && (
+          <form onSubmit={handleAuth} className="flex flex-col text-slate-900">
+            <div className={`transition-all duration-300 ease-in-out origin-top overflow-hidden ${isSignup ? 'max-h-24 opacity-100 mb-4' : 'max-h-0 opacity-0 mb-0 pointer-events-none'}`}>
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">お名前</label>
                 <input
                   type="text"
-                  required
+                  required={isSignup}
                   placeholder="山田 太郎"
                   value={signupName}
                   onChange={(e) => setSignupName(e.target.value)}
                   className="w-full bg-white/95 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
                 />
               </div>
-            )}
+            </div>
 
-            <div className="space-y-1">
+            <div className="space-y-1 mb-4">
               <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">メールアドレス</label>
               <input
                 type="email"
@@ -652,7 +764,7 @@ export default function AsanaClone() {
               />
             </div>
 
-            <div className="space-y-1">
+            <div className="space-y-1 mb-4">
               <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">パスワード</label>
               <input
                 type="password"
@@ -674,8 +786,8 @@ export default function AsanaClone() {
           </form>
 
           {/* Quick Demo Login Box */}
-          {!isSignup && (
-            <div className="pt-4 border-t border-white/10 space-y-3">
+          <div className={`transition-all duration-300 ease-in-out origin-bottom overflow-hidden ${!isSignup ? 'max-h-40 opacity-100 mt-6 pt-6 border-t border-white/10' : 'max-h-0 opacity-0 mt-0 pt-0 border-t-0 pointer-events-none'}`}>
+            <div className="space-y-3">
               <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider text-center">デモアカウントでクイックログイン</div>
               <div className="flex justify-center">
                 <button
@@ -691,7 +803,7 @@ export default function AsanaClone() {
                 </button>
               </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
     )
@@ -935,8 +1047,14 @@ export default function AsanaClone() {
                       {colTasks.map(task => (
                         <div 
                           key={task.id}
-                          onClick={() => setSelectedTask(task)}
-                          className="flex items-center px-5 py-3.5 hover:bg-slate-50/80 cursor-pointer transition-colors group"
+                          onClick={() => {
+                            if (!task.id.startsWith('temp-')) {
+                              setSelectedTask(task)
+                            }
+                          }}
+                          className={`flex items-center px-5 py-3.5 hover:bg-slate-50/80 cursor-pointer transition-colors group ${
+                            task.id.startsWith('temp-') ? 'opacity-60 pointer-events-none' : ''
+                          }`}
                         >
                           {/* Checkbox Icon */}
                           <button
@@ -1060,13 +1178,23 @@ export default function AsanaClone() {
                       {colTasks.map(task => (
                         <div
                           key={task.id}
-                          draggable
-                          onDragStart={(e) => handleDragStart(e, task.id)}
+                          draggable={!task.id.startsWith('temp-')}
+                          onDragStart={(e) => {
+                            if (task.id.startsWith('temp-')) {
+                              e.preventDefault()
+                              return
+                            }
+                            handleDragStart(e, task.id)
+                          }}
                           onDragEnd={handleDragEnd}
-                          onClick={() => setSelectedTask(task)}
+                          onClick={() => {
+                            if (!task.id.startsWith('temp-')) {
+                              setSelectedTask(task)
+                            }
+                          }}
                           className={`bg-white p-4 border border-slate-200 rounded-xl shadow-sm hover:shadow-md cursor-pointer transition-shadow duration-200 group relative border-l-4 border-l-indigo-500/35 ${
                             draggingTaskId === task.id ? 'opacity-40 border-dashed border-indigo-400 bg-indigo-50/10' : ''
-                          }`}
+                          } ${task.id.startsWith('temp-') ? 'opacity-60 pointer-events-none' : ''}`}
                         >
                           <div className="flex items-start justify-between gap-3">
                             <span className={`text-sm font-medium text-slate-800 line-clamp-2 leading-snug ${task.status === 'DONE' ? 'line-through text-slate-400' : ''}`}>
@@ -1671,6 +1799,37 @@ export default function AsanaClone() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Toast Notification for Undo Delete */}
+      {showToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 border border-slate-800 text-white px-4 py-3.5 rounded-2xl shadow-2xl flex items-center gap-4 transition-all duration-300 animate-slide-up max-w-sm">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-0.5">タスクの削除</p>
+            <p className="text-sm font-medium truncate text-white">{toastMessage}</p>
+          </div>
+          <button
+            onClick={handleUndoDelete}
+            className="px-3 py-1.5 text-xs font-bold text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 hover:border-indigo-500/40 rounded-xl transition-all uppercase tracking-wider cursor-pointer shrink-0"
+          >
+            元に戻す
+          </button>
+          <button
+            onClick={() => {
+              // Commit delete immediately
+              if (undoTimeoutId) {
+                clearTimeout(undoTimeoutId)
+                if (undoTask) executeDeleteTask(undoTask.id)
+                setUndoTimeoutId(null)
+                setUndoTask(null)
+              }
+              setShowToast(false)
+            }}
+            className="p-1 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors cursor-pointer shrink-0"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
